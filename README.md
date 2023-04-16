@@ -1,7 +1,7 @@
 # Arduino Dual AY MIDI detune
 Project for Arduino ProMicro: MIDI synthesizer on two AY-3-8910 chips with detune functionality
 
-Based on the project:
+Based on:
 https://dogemicrosystems.ca/wiki/Dual_AY-3-8910_MIDI_module
 
 Added functionality:
