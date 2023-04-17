@@ -1,4 +1,4 @@
-// Arduino ProMicro project: MIDI synthesizer on two AY-3-8910 chips
+// Arduino Pro Micro project: MIDI synthesizer on two AY-3-8910 chips
 // based on: https://dogemicrosystems.ca/wiki/Dual_AY-3-8910_MIDI_module
 // added support of pitch bend/modulation and detune (several modes)
 
