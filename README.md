@@ -3,6 +3,7 @@ Project for Arduino ProMicro: MIDI synthesizer on two AY-3-8910 chips with detun
 
 Based on (and great thanks to the author):
 https://dogemicrosystems.ca/wiki/Dual_AY-3-8910_MIDI_module
+requires library: https://github.com/arduino-libraries/MIDIUSB
 
 Added functionality:
 - support of MIDI pitch bend and modulation wheels/messages
@@ -12,3 +13,4 @@ Added functionality:
 - potentiometer for setting detune ratio on-the-fly
 
 Fixed circuit part for connecting MIDI input (see MIDI_input_fix.png)
+
