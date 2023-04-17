@@ -916,7 +916,7 @@ void setup() {
 }
 
 void handleMidiMessage(midiEventPacket_t &rx) {
-  if (rx.header == 0xE) { // Pitch bend
+  if (rx.header == 0xE && rx.byte1 == 0xE0) { // Pitch bend
     g_pitchBend = rx.byte3 - 0x40;
   }
   else if (rx.header == 0x9) { // Note on
@@ -928,7 +928,7 @@ void handleMidiMessage(midiEventPacket_t &rx) {
   else if (rx.header == 0xB) { // Control Change
     if (rx.byte2 == 0x78 || rx.byte2 == 0x79 || rx.byte2 == 0x7B) // AllSoundOff, ResetAllControllers, or AllNotesOff
       KillVoices();
-    else if (rx.byte1 == 0xB0) // Modulation
+    else if (rx.byte1 == 0xB0 && rx.byte2 == 0x01) // Modulation
       g_modDepth = rx.byte3;
   }
 }
@@ -936,6 +936,7 @@ void handleMidiMessage(midiEventPacket_t &rx) {
 void KillVoices() {
   for (ushort i = 0; i < MAX_VOICES; i++)
     voices[i].kill();
+  synth_init();
 }
 
 void loop() {
@@ -976,7 +977,7 @@ void loop() {
 
 #ifdef DEBUG
     //MIDI debugging
-    if (rx.header != 0) {
+    if (rx.header != 0 && rx.header != 0xF) {
       Serial.print("Received MIDI: ");
       Serial.print(rx.header, HEX);
       Serial.print("-");
