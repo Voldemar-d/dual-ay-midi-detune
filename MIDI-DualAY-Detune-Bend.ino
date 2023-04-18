@@ -977,7 +977,7 @@ void loop() {
 
 #ifdef DEBUG
     //MIDI debugging
-    if (rx.header != 0 && rx.header != 0xF) {
+    if (rx.header != 0 /*&& rx.header != 0xF*/) {
       Serial.print("Received MIDI: ");
       Serial.print(rx.header, HEX);
       Serial.print("-");
