@@ -114,13 +114,12 @@ static void clockSetup() {
   // Use ClkIO with no prescaling: CS12..0 = 001
   // Interrupts off: TIMSK0 = 0
   // OCR0A = interval value
-
   TCCR1A = (1 << COM1A0);
   TCCR1B = (1 << WGM12) | (1 << CS10);
   TCCR1C = 0;
   TIMSK1 = 0;
-  OCR1AH = 0;
-  OCR1AL = DIVISOR; // NB write high byte first
+  OCR1AH = 0; // NB write high byte first
+  OCR1AL = 3; // DIVISOR; changed to 3 for 2 MHz clock
 }
 
 static void setData(unsigned char db) {
@@ -131,62 +130,53 @@ static void setData(unsigned char db) {
   }
 }
 
-static void writeReg_A(unsigned char reg, unsigned char db) {
+static void writeReg_AY(byte num, unsigned char reg, unsigned char db) {
   // This is a bit of an odd way to do it, BC1 is kept low and NACT, BAR, IAB, and DWS are used.
   // BC1 is kept low the entire time.
 
   // Inactive (BDIR BC2 BC1 0 0 0)
-  digitalWrite(BDIR_A, LOW);
-  digitalWrite(BC2_A, LOW);
+  if (0 == num) {
+    digitalWrite(BDIR_A, LOW);
+    digitalWrite(BC2_A, LOW);
+  }
+  else if (1 == num) {
+    digitalWrite(BDIR_B, LOW);
+    digitalWrite(BC2_B, LOW);
+  }
 
   //Set register address
   setData(reg);
 
   // BAR (Latch) (BDIR BC2 BC1 1 0 0)
-  digitalWrite(BDIR_A, HIGH);
-
   // Inactive (BDIR BC2 BC1 0 0 0)
-  digitalWrite(BDIR_A, LOW);
+  if (0 == num) {
+    digitalWrite(BDIR_A, HIGH);
+    digitalWrite(BDIR_A, LOW);
+  }
+  else if (1 == num) {
+    digitalWrite(BDIR_B, HIGH);
+    digitalWrite(BDIR_B, LOW);
+  }
 
   //Set register contents
   setData(db);
 
-  // Write (BDIR BC2 BC1 1 1 0)
-  digitalWrite(BC2_A, HIGH);
-  digitalWrite(BDIR_A, HIGH);
-
-  // Inactive (BDIR BC2 BC1 0 0 0)
-  digitalWrite(BC2_A, LOW);
-  digitalWrite(BDIR_A, LOW);
-}
-
-static void writeReg_B(unsigned char reg, unsigned char db) {
-  // This is a bit of an odd way to do it, BC1 is kept low and NACT, BAR, IAB, and DWS are used.
-  // BC1 is kept low the entire time.
-
-  // Inactive (BDIR BC2 BC1 0 0 0)
-  digitalWrite(BDIR_B, LOW);
-  digitalWrite(BC2_B, LOW);
-
-  //Set register address
-  setData(reg);
-
-  // BAR (Latch) (BDIR BC2 BC1 1 0 0)
-  digitalWrite(BDIR_B, HIGH);
-
-  // Inactive (BDIR BC2 BC1 0 0 0)
-  digitalWrite(BDIR_B, LOW);
-
-  //Set register contents
-  setData(db);
-
-  // Write (BDIR BC2 BC1 1 1 0)
-  digitalWrite(BC2_B, HIGH);
-  digitalWrite(BDIR_B, HIGH);
-
-  // Inactive (BDIR BC2 BC1 0 0 0)
-  digitalWrite(BC2_B, LOW);
-  digitalWrite(BDIR_B, LOW);
+  if (0 == num) {
+    // Write (BDIR BC2 BC1 1 1 0)
+    digitalWrite(BC2_A, HIGH);
+    digitalWrite(BDIR_A, HIGH);
+    // Inactive (BDIR BC2 BC1 0 0 0)
+    digitalWrite(BC2_A, LOW);
+    digitalWrite(BDIR_A, LOW);
+  }
+  else if (1 == num) {
+    // Write (BDIR BC2 BC1 1 1 0)
+    digitalWrite(BC2_B, HIGH);
+    digitalWrite(BDIR_B, HIGH);
+    // Inactive (BDIR BC2 BC1 0 0 0)
+    digitalWrite(BC2_B, LOW);
+    digitalWrite(BDIR_B, LOW);
+  }
 }
 
 // AY-3-8910 driver ---------------------------------------
@@ -222,22 +212,22 @@ class PSGRegs {
     void init() {
       for (int i = 0; i < 16; i++) {
         regs_A[i] = lastregs_A[i] = 0xFF;
-        writeReg_A(i, regs_A[i]);
+        writeReg_AY(0, i, regs_A[i]);
 
         regs_B[i] = lastregs_B[i] = 0xFF;
-        writeReg_B(i, regs_B[i]);
+        writeReg_AY(1, i, regs_B[i]);
       }
     }
 
     void update() {
       for (int i = 0; i < 16; i++) {
         if (regs_A[i] != lastregs_A[i]) {
-          writeReg_A(i, regs_A[i]);
+          writeReg_AY(0, i, regs_A[i]);
           lastregs_A[i] = regs_A[i];
         }
 
         if (regs_B[i] != lastregs_B[i]) {
-          writeReg_B(i, regs_B[i]);
+          writeReg_AY(1, i, regs_B[i]);
           lastregs_B[i] = regs_B[i];
         }
       }
@@ -413,6 +403,15 @@ static const ushort freq_table[N_NOTES] = {
   20930, // MIDI 96, 2093.00 Hz
 };
 
+static const ushort freq_env[N_NOTES] = {
+  477, 450, 425, 401, 378, 357, 337, 318, 300, 283, 267, 252,
+  238, 224, 212, 200, 189, 178, 168, 158, 149, 141, 133, 126,
+  118, 112, 105, 99, 94, 88, 83, 79, 74, 70, 66, 62,
+  59, 55, 52, 49, 46, 44, 41, 39, 37, 35, 33, 31,
+  29, 27, 26, 24, 23, 21, 20, 19, 18, 17, 16, 15,
+  14, 13, 12, 12, 11, 10, 10, 9, 8, 8, 7, 7, 6,
+};
+
 struct FXParams {
   ushort noisefreq;
   ushort tonefreq;
@@ -452,7 +451,7 @@ class Voice {
     }
 
     typedef double freq_t;
-    const freq_t ayf = 625000.0, pf = 1.0009172817958015637819657653483, // (2^(1/12))^(1/63)
+    const freq_t ayf = 1250000.00, pf = 1.0009172817958015637819657653483, // (2^(1/12))^(1/63)
                  pf5 = 1.3348398541700343648308318811845, // (2^(1/12))^5
                  pf7 = 1.4983070768766814987992807320298, // (2^(1/12))^7
                  dr = 50.0; // detune ratio coefficient
@@ -488,10 +487,14 @@ class Voice {
       return (ushort)divider;
     }
 
-    void setSaw(int modstep, int modlen) {
+    void setSaw(int modstep, int modlen, note_t note) {
       int modval = (modstep > modlen / 2) ? modlen - modstep : modstep,
-          inval = analogRead(PIN_DETUNE_RATIO) / 16,
-          enval = inval + int(32.0 * float(g_modDepth) * float(modval) / float(0x7f * modlen) + 0.5);
+          inval = analogRead(PIN_DETUNE_RATIO) / 16, enval;
+      if (inval < 1)
+        //enval = freq_env[(note - MIDI_MIN) % 12 + 24];
+        enval = freq_env[note - MIDI_MIN];
+      else
+        enval = inval + int(32.0 * float(g_modDepth) * float(modval) / float(0x7f * modlen) + 0.5);
       psg.setEnvelope(enval, 8);
     }
 
@@ -507,7 +510,7 @@ class Voice {
       if (bSaw) { // periodic envelope
         m_ampl = AMPL_MAX + 1;
         m_adsr = 'S';
-        setSaw(m_modstep, modlen);
+        setSaw(m_modstep, modlen, m_note);
       }
       else { // no envelope
         if (vel > 127) {
@@ -608,7 +611,7 @@ class Voice {
         m_pitch = getPitch(m_note, (eDetune)m_detune, m_modstep, modlen);
         psg.setTone(m_chan, m_pitch, m_ampl >> 6);
         if (eSaw == m_detune)
-          setSaw(m_modstep, modlen);
+          setSaw(m_modstep, modlen, m_note);
       }
       else {
         psg.setOff(m_chan);
