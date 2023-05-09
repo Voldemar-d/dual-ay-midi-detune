@@ -134,49 +134,30 @@ static void writeReg_AY(byte num, unsigned char reg, unsigned char db) {
   // This is a bit of an odd way to do it, BC1 is kept low and NACT, BAR, IAB, and DWS are used.
   // BC1 is kept low the entire time.
 
+  const byte BDIR = (0 == num) ? BDIR_A : BDIR_B,
+             BC2 = (0 == num) ? BC2_A : BC2_B;
+
   // Inactive (BDIR BC2 BC1 0 0 0)
-  if (0 == num) {
-    digitalWrite(BDIR_A, LOW);
-    digitalWrite(BC2_A, LOW);
-  }
-  else if (1 == num) {
-    digitalWrite(BDIR_B, LOW);
-    digitalWrite(BC2_B, LOW);
-  }
+  digitalWrite(BDIR, LOW);
+  digitalWrite(BC2, LOW);
 
   //Set register address
   setData(reg);
 
   // BAR (Latch) (BDIR BC2 BC1 1 0 0)
   // Inactive (BDIR BC2 BC1 0 0 0)
-  if (0 == num) {
-    digitalWrite(BDIR_A, HIGH);
-    digitalWrite(BDIR_A, LOW);
-  }
-  else if (1 == num) {
-    digitalWrite(BDIR_B, HIGH);
-    digitalWrite(BDIR_B, LOW);
-  }
+  digitalWrite(BDIR, HIGH);
+  digitalWrite(BDIR, LOW);
 
   //Set register contents
   setData(db);
 
-  if (0 == num) {
-    // Write (BDIR BC2 BC1 1 1 0)
-    digitalWrite(BC2_A, HIGH);
-    digitalWrite(BDIR_A, HIGH);
-    // Inactive (BDIR BC2 BC1 0 0 0)
-    digitalWrite(BC2_A, LOW);
-    digitalWrite(BDIR_A, LOW);
-  }
-  else if (1 == num) {
-    // Write (BDIR BC2 BC1 1 1 0)
-    digitalWrite(BC2_B, HIGH);
-    digitalWrite(BDIR_B, HIGH);
-    // Inactive (BDIR BC2 BC1 0 0 0)
-    digitalWrite(BC2_B, LOW);
-    digitalWrite(BDIR_B, LOW);
-  }
+  // Write (BDIR BC2 BC1 1 1 0)
+  digitalWrite(BC2, HIGH);
+  digitalWrite(BDIR, HIGH);
+  // Inactive (BDIR BC2 BC1 0 0 0)
+  digitalWrite(BC2, LOW);
+  digitalWrite(BDIR, LOW);
 }
 
 // AY-3-8910 driver ---------------------------------------
@@ -234,53 +215,39 @@ class PSGRegs {
     }
 
     void setTone(ushort ch, ushort divisor, ushort ampl) {
+      unsigned char* regs_AY = regs_A;
       if (ch > 2) {
         //reduce channel to usable range
         ch = ch - 3;
         //use regs_B
-        regs_B[TONEALOW  + (ch << 1)] = (divisor & 0xFF);
-        regs_B[TONEAHIGH + (ch << 1)] = (divisor >> 8);
-        regs_B[TONEAAMPL + ch] = ampl;
-
-        ushort mask = (8 + 1) << ch;
-        regs_B[MIXER] = (regs_B[MIXER] | mask) ^ (1 << ch);
-
-        return;
+        regs_AY = regs_B;
       }
 
-      regs_A[TONEALOW  + (ch << 1)] = (divisor & 0xFF);
-      regs_A[TONEAHIGH + (ch << 1)] = (divisor >> 8);
-      regs_A[TONEAAMPL + ch] = ampl;
+      regs_AY[TONEALOW  + (ch << 1)] = (divisor & 0xFF);
+      regs_AY[TONEAHIGH + (ch << 1)] = (divisor >> 8);
+      regs_AY[TONEAAMPL + ch] = ampl;
 
       ushort mask = (8 + 1) << ch;
-      regs_A[MIXER] = (regs_A[MIXER] | mask) ^ (1 << ch);
+      regs_AY[MIXER] = (regs_AY[MIXER] | mask) ^ (1 << ch);
     }
 
     void setToneAndNoise(ushort ch, ushort divisor, ushort noisefreq, ushort ampl) {
+      unsigned char* regs_AY = regs_A;
       if (ch > 2) {
         //reduce channel to usable range
         ch = ch - 3;
         //use regs_B
-        regs_B[TONEALOW  + (ch << 1)] = (divisor & 0xFF);
-        regs_B[TONEAHIGH + (ch << 1)] = (divisor >> 8);
-        regs_B[NOISEGEN] = noisefreq;
-        regs_B[TONEAAMPL + ch] = ampl;
-
-        ushort mask = (8 + 1) << ch;
-        ushort bits = (noisefreq < 16 ? 8 : 0) + (divisor > 0 ? 1 : 0);
-        regs_B[MIXER] = (regs_B[MIXER] | mask) ^ (bits << ch);
-
-        return;
+        regs_AY = regs_B;
       }
 
-      regs_A[TONEALOW  + (ch << 1)] = (divisor & 0xFF);
-      regs_A[TONEAHIGH + (ch << 1)] = (divisor >> 8);
-      regs_A[NOISEGEN] = noisefreq;
-      regs_A[TONEAAMPL + ch] = ampl;
+      regs_AY[TONEALOW  + (ch << 1)] = (divisor & 0xFF);
+      regs_AY[TONEAHIGH + (ch << 1)] = (divisor >> 8);
+      regs_AY[NOISEGEN] = noisefreq;
+      regs_AY[TONEAAMPL + ch] = ampl;
 
       ushort mask = (8 + 1) << ch;
       ushort bits = (noisefreq < 16 ? 8 : 0) + (divisor > 0 ? 1 : 0);
-      regs_A[MIXER] = (regs_A[MIXER] | mask) ^ (bits << ch);
+      regs_AY[MIXER] = (regs_AY[MIXER] | mask) ^ (bits << ch);
     }
 
     void setEnvelope(ushort divisor, ushort shape) {
@@ -294,25 +261,19 @@ class PSGRegs {
     }
 
     void setOff(ushort ch) {
+      unsigned char* regs_AY = regs_A;
       if (ch > 2) {
         //reduce channel to usable range
         ch = ch - 3;
         //use regs_B
-        ushort mask = (8 + 1) << ch;
-        regs_B[MIXER] = (regs_A[MIXER] | mask);
-        regs_B[TONEAAMPL + ch] = 0;
-        if (regs_B[ENVSHAPE] != 0) {
-          regs_B[ENVSHAPE] = 0;
-          update(); // Force flush
-        }
-        return;
+        regs_AY = regs_B;
       }
 
       ushort mask = (8 + 1) << ch;
-      regs_A[MIXER] = (regs_A[MIXER] | mask);
-      regs_A[TONEAAMPL + ch] = 0;
-      if (regs_A[ENVSHAPE] != 0) {
-        regs_A[ENVSHAPE] = 0;
+      regs_AY[MIXER] = (regs_AY[MIXER] | mask);
+      regs_AY[TONEAAMPL + ch] = 0;
+      if (regs_AY[ENVSHAPE] != 0) {
+        regs_AY[ENVSHAPE] = 0;
         update(); // Force flush
       }
     }
