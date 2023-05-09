@@ -403,15 +403,6 @@ static const ushort freq_table[N_NOTES] = {
   20930, // MIDI 96, 2093.00 Hz
 };
 
-static const ushort freq_env[N_NOTES] = {
-  477, 450, 425, 401, 378, 357, 337, 318, 300, 283, 267, 252,
-  238, 224, 212, 200, 189, 178, 168, 158, 149, 141, 133, 126,
-  118, 112, 105, 99, 94, 88, 83, 79, 74, 70, 66, 62,
-  59, 55, 52, 49, 46, 44, 41, 39, 37, 35, 33, 31,
-  29, 27, 26, 24, 23, 21, 20, 19, 18, 17, 16, 15,
-  14, 13, 12, 12, 11, 10, 10, 9, 8, 8, 7, 7, 6,
-};
-
 struct FXParams {
   ushort noisefreq;
   ushort tonefreq;
@@ -490,9 +481,12 @@ class Voice {
     void setSaw(int modstep, int modlen, note_t note) {
       int modval = (modstep > modlen / 2) ? modlen - modstep : modstep,
           inval = analogRead(PIN_DETUNE_RATIO) / 16, enval;
-      if (inval < 1)
-        //enval = freq_env[(note - MIDI_MIN) % 12 + 24];
-        enval = freq_env[note - MIDI_MIN];
+      if (inval < 1) {
+        int index = note - MIDI_MIN, oct = index % 12;
+        freq_t freq = freq_table[index];
+        //enval = 3 * int(ayf / freq) / ((oct < 2 ? 16 : 8) * 2) ;
+        enval = int(ayf / freq) / (oct < 2 ? 16 : 8);
+      }
       else
         enval = inval + int(32.0 * float(g_modDepth) * float(modval) / float(0x7f * modlen) + 0.5);
       psg.setEnvelope(enval, 8);
