@@ -12,3 +12,6 @@ Added functionality:
 - potentiometer for setting detune ratio on-the-fly
 
 Fixed circuit part for connecting MIDI input (see MIDI_input_fix.png)
+
+Demo video:
+https://youtu.be/jKoCbbaBYAo
