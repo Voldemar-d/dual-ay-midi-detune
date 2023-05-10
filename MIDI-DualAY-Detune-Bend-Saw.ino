@@ -386,6 +386,61 @@ static const ToneParams tones[MAX_TONES] = {
   { 10, 31, 30 }
 };
 
+typedef double freq_t;
+static const freq_t ayf = 1250000.00, pf = 1.0009172817958015637819657653483, // (2^(1/12))^(1/63)
+                    pf5 = 1.3348398541700343648308318811845, // (2^(1/12))^5
+                    pf7 = 1.4983070768766814987992807320298, // (2^(1/12))^7
+                    dr = 50.0; // detune ratio coefficient
+static const ushort modlen1 = 20, modlen2 = 100, modmax = 10; // modulation rate and max depth
+#define SAW_RATIO_DEN 16 // coefficient for getting saw depth
+
+ushort getPitch(note_t note, eDetune detune, note_t modstep, ushort modlen) {
+  freq_t freq = freq_table[note - MIDI_MIN], fp = 1.0;
+  int modval = (modstep > modlen / 2) ? modlen - modstep : modstep,
+      pitchBend = 0;
+  if (eSaw != detune)
+    pitchBend = g_pitchBend + modval * modmax * g_modDepth / 0x7F;
+  else if (eSaw == detune && (analogRead(PIN_DETUNE_RATIO) / SAW_RATIO_DEN) < 1)
+    pitchBend = g_pitchBend;
+  if (pitchBend != 0)
+    fp = pow(pf, freq_t(pitchBend));
+  if (detune >= eDetuneOn) {
+    fp *= pow(pf, freq_t(analogRead(PIN_DETUNE_RATIO)) / dr);
+    switch (detune) {
+      case eDetuneOctUp:
+        fp *= 2.0;
+        break;
+      case eDetuneOctDn:
+        fp *= 0.5;
+        break;
+      case eDetune5:
+        fp *= pf5;
+        break;
+      case eDetune7:
+        fp *= pf7;
+        break;
+    }
+  }
+  freq *= fp;
+  float divider = float(ayf / freq);
+  return (ushort)divider;
+}
+
+void setSaw(int modstep, int modlen, note_t note) {
+  int modval = (modstep > modlen / 2) ? modlen - modstep : modstep,
+      inval = analogRead(PIN_DETUNE_RATIO) / SAW_RATIO_DEN, enval;
+  if (inval < 1) {
+    int index = note - MIDI_MIN, oct = index % 12;
+    freq_t freq = freq_table[index];
+    enval = int(ayf / freq) / (oct < 2 ? 16 : 8);
+    if (g_modDepth > 0x3F)
+      enval = enval * 3 / 2;
+  }
+  else
+    enval = inval + int(32.0 * float(g_modDepth) * float(modval) / float(0x7f * modlen) + 0.5);
+  psg.setEnvelope(enval, 8);
+}
+
 class Voice {
   public:
     ushort m_chan;  // Index to psg channel
@@ -400,57 +455,6 @@ class Voice {
       m_chan = chan;
       m_ampl = m_sustain = 0;
       kill();
-    }
-
-    typedef double freq_t;
-    const freq_t ayf = 1250000.00, pf = 1.0009172817958015637819657653483, // (2^(1/12))^(1/63)
-                 pf5 = 1.3348398541700343648308318811845, // (2^(1/12))^5
-                 pf7 = 1.4983070768766814987992807320298, // (2^(1/12))^7
-                 dr = 50.0; // detune ratio coefficient
-    const ushort modlen1 = 20, modlen2 = 100, modmax = 10; // modulation rate and max depth
-
-    ushort getPitch(note_t note, eDetune detune, note_t modstep, ushort modlen) {
-      freq_t freq = freq_table[note - MIDI_MIN], fp = 1.0;
-      int modval = (modstep > modlen / 2) ? modlen - modstep : modstep,
-          pitchBend = 0;
-      if (eSaw != detune)
-        pitchBend = g_pitchBend + modval * modmax * g_modDepth / 0x7F;
-      if (pitchBend != 0)
-        fp = pow(pf, freq_t(pitchBend));
-      if (detune >= eDetuneOn) {
-        fp *= pow(pf, freq_t(analogRead(PIN_DETUNE_RATIO)) / dr);
-        switch (detune) {
-          case eDetuneOctUp:
-            fp *= 2.0;
-            break;
-          case eDetuneOctDn:
-            fp *= 0.5;
-            break;
-          case eDetune5:
-            fp *= pf5;
-            break;
-          case eDetune7:
-            fp *= pf7;
-            break;
-        }
-      }
-      freq *= fp;
-      float divider = float(ayf / freq);
-      return (ushort)divider;
-    }
-
-    void setSaw(int modstep, int modlen, note_t note) {
-      int modval = (modstep > modlen / 2) ? modlen - modstep : modstep,
-          inval = analogRead(PIN_DETUNE_RATIO) / 16, enval;
-      if (inval < 1) {
-        int index = note - MIDI_MIN, oct = index % 12;
-        freq_t freq = freq_table[index];
-        //enval = 3 * int(ayf / freq) / ((oct < 2 ? 16 : 8) * 2) ;
-        enval = int(ayf / freq) / (oct < 2 ? 16 : 8);
-      }
-      else
-        enval = inval + int(32.0 * float(g_modDepth) * float(modval) / float(0x7f * modlen) + 0.5);
-      psg.setEnvelope(enval, 8);
     }
 
     void start(note_t note, midictrl_t vel, midictrl_t chan, eDetune detune) {
