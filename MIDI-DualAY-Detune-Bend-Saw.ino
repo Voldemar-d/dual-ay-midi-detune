@@ -104,7 +104,7 @@ BDIR_B = A1,
 nRESET = 15,
 clkOUT = 9;
 
-static const ushort DIVISOR = 7; // Set for 1MHz clock
+static const ushort DIVISOR = 1; // changed to 1 for 4 MHz clock
 
 static void clockSetup() {
   // Timer 1 setup for Mega32U4 devices
@@ -119,7 +119,7 @@ static void clockSetup() {
   TCCR1C = 0;
   TIMSK1 = 0;
   OCR1AH = 0; // NB write high byte first
-  OCR1AL = 3; // DIVISOR; changed to 3 for 2 MHz clock
+  OCR1AL = DIVISOR;
 }
 
 static void setData(unsigned char db) {
@@ -387,7 +387,7 @@ static const ToneParams tones[MAX_TONES] = {
 };
 
 typedef double freq_t;
-static const freq_t ayf = 1250000.00, pf = 1.0009172817958015637819657653483, // (2^(1/12))^(1/63)
+static const freq_t ayf = 2500000.00, pf = 1.0009172817958015637819657653483, // (2^(1/12))^(1/63)
                     pf5 = 1.3348398541700343648308318811845, // (2^(1/12))^5
                     pf7 = 1.4983070768766814987992807320298, // (2^(1/12))^7
                     dr = 50.0; // detune ratio coefficient
@@ -398,10 +398,13 @@ ushort getPitch(note_t note, eDetune detune, note_t modstep, ushort modlen) {
   freq_t freq = freq_table[note - MIDI_MIN], fp = 1.0;
   int modval = (modstep > modlen / 2) ? modlen - modstep : modstep,
       pitchBend = 0;
+  bool bExact = false;
   if (eSaw != detune)
     pitchBend = g_pitchBend + modval * modmax * g_modDepth / 0x7F;
-  else if (eSaw == detune && (analogRead(PIN_DETUNE_RATIO) / SAW_RATIO_DEN) < 1)
+  else if (eSaw == detune && (analogRead(PIN_DETUNE_RATIO) / SAW_RATIO_DEN) < 1) {
     pitchBend = g_pitchBend;
+    bExact = (0 == pitchBend);
+  }
   if (pitchBend != 0)
     fp = pow(pf, freq_t(pitchBend));
   if (detune >= eDetuneOn) {
@@ -423,8 +426,17 @@ ushort getPitch(note_t note, eDetune detune, note_t modstep, ushort modlen) {
   }
   freq *= fp;
   float divider = float(ayf / freq);
-  return (ushort)divider;
+  ushort sdiv = (ushort)divider;
+  if (bExact) {
+    if (sdiv % 16 > 8)
+      sdiv += 16 - sdiv % 16;
+    else
+      sdiv -= sdiv % 16;
+  }
+  return sdiv;
 }
+
+static const byte autoEnv[][2] = {{1, 1}, {3, 2}, {4, 3}, {5, 4}};
 
 void setSaw(int modstep, int modlen, note_t note) {
   int modval = (modstep > modlen / 2) ? modlen - modstep : modstep,
@@ -432,9 +444,14 @@ void setSaw(int modstep, int modlen, note_t note) {
   if (inval < 1) {
     int index = note - MIDI_MIN, oct = index % 12;
     freq_t freq = freq_table[index];
-    enval = int(ayf / freq) / (oct < 2 ? 16 : 8);
-    if (g_modDepth > 0x3F)
-      enval = enval * 3 / 2;
+    enval = int(ayf / freq);
+    if (enval % 16 > 8)
+      enval += 16 - enval % 16;
+    else
+      enval -= enval % 16;
+    enval /= (oct < 2 ? 16 : 8);
+    index = g_modDepth / 32;
+    enval = enval * autoEnv[index][0] / autoEnv[index][1];
   }
   else
     enval = inval + int(32.0 * float(g_modDepth) * float(modval) / float(0x7f * modlen) + 0.5);
