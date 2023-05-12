@@ -425,18 +425,20 @@ ushort getPitch(note_t note, eDetune detune, note_t modstep, ushort modlen) {
     }
   }
   freq *= fp;
-  float divider = float(ayf / freq);
-  ushort sdiv = (ushort)divider;
-  if (bExact) {
-    if (sdiv % 16 > 8)
-      sdiv += 16 - sdiv % 16;
-    else
-      sdiv -= sdiv % 16;
-  }
-  return sdiv;
+  int idiv = int(float(ayf / freq));
+  if (bExact)
+    Round16(idiv);
+  return idiv;
 }
 
-static const byte autoEnv[][2] = {{1, 1}, {3, 2}, {4, 3}, {5, 4}};
+void Round16(int& idiv) {
+  if (idiv % 16 > 8)
+    idiv += 16 - idiv % 16;
+  else
+    idiv -= idiv % 16;
+}
+
+static const byte autoEnv[][2] = {{1, 1}, {3, 2}, {2, 3}, {5, 4}};
 
 void setSaw(int modstep, int modlen, note_t note) {
   int modval = (modstep > modlen / 2) ? modlen - modstep : modstep,
@@ -445,10 +447,7 @@ void setSaw(int modstep, int modlen, note_t note) {
     int index = note - MIDI_MIN, oct = index % 12;
     freq_t freq = freq_table[index];
     enval = int(ayf / freq);
-    if (enval % 16 > 8)
-      enval += 16 - enval % 16;
-    else
-      enval -= enval % 16;
+    Round16(enval);
     enval /= (oct < 2 ? 16 : 8);
     index = g_modDepth / 32;
     enval = enval * autoEnv[index][0] / autoEnv[index][1];
