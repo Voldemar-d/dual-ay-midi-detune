@@ -393,6 +393,7 @@ static const freq_t ayf = 2500000.00, pf = 1.0009172817958015637819657653483, //
                     dr = 50.0; // detune ratio coefficient
 static const ushort modlen1 = 20, modlen2 = 100, modmax = 10; // modulation rate and max depth
 #define SAW_RATIO_DEN 16 // coefficient for getting saw depth
+#define ENV_STEP_DIV 26 // divider for switching envelope modes with modulation wheel
 
 ushort getPitch(note_t note, eDetune detune, note_t modstep, ushort modlen) {
   freq_t freq = freq_table[note - MIDI_MIN], fp = 1.0;
@@ -403,7 +404,7 @@ ushort getPitch(note_t note, eDetune detune, note_t modstep, ushort modlen) {
     pitchBend = g_pitchBend + modval * modmax * g_modDepth / 0x7F;
   else if (eSaw == detune && (analogRead(PIN_DETUNE_RATIO) / SAW_RATIO_DEN) < 1) {
     pitchBend = g_pitchBend;
-    bExact = (0 == pitchBend);
+    bExact = (0 == pitchBend && (g_modDepth / ENV_STEP_DIV) > 0);
   }
   if (pitchBend != 0)
     fp = pow(pf, freq_t(pitchBend));
@@ -432,7 +433,7 @@ ushort getPitch(note_t note, eDetune detune, note_t modstep, ushort modlen) {
 }
 
 void Round16(int& idiv) {
-  if (idiv % 16 > 8)
+  if (idiv % 16 > 7)
     idiv += 16 - idiv % 16;
   else
     idiv -= idiv % 16;
@@ -447,9 +448,12 @@ void setSaw(int modstep, int modlen, note_t note) {
     int index = note - MIDI_MIN, oct = index % 12;
     freq_t freq = freq_table[index];
     enval = int(ayf / freq);
-    Round16(enval);
+    index = g_modDepth / ENV_STEP_DIV;
+    if (index > 0) {
+      Round16(enval);
+      index--;
+    }
     enval /= (oct < 2 ? 16 : 8);
-    index = g_modDepth / 32;
     enval = enval * autoEnv[index][0] / autoEnv[index][1];
   }
   else
