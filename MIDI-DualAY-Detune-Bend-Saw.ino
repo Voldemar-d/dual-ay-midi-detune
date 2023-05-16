@@ -104,7 +104,13 @@ BDIR_B = A1,
 nRESET = 15,
 clkOUT = 9;
 
-static const ushort DIVISOR = 1; // changed to 1 for 4 MHz clock
+#define CLOCK_4MHZ
+
+#ifdef CLOCK_4MHZ
+static const ushort DIVISOR = 1; // for 4 MHz clock
+#else
+static const ushort DIVISOR = 7; // for 1 MHz clock
+#endif
 
 static void clockSetup() {
   // Timer 1 setup for Mega32U4 devices
@@ -387,7 +393,12 @@ static const ToneParams tones[MAX_TONES] = {
 };
 
 typedef double freq_t;
-static const freq_t ayf = 2500000.00, pf = 1.0009172817958015637819657653483, // (2^(1/12))^(1/63)
+#ifdef CLOCK_4MHZ
+static const freq_t ayf = 2500000.00, // for 4 MHz clock
+#else
+static const freq_t ayf = 625000.00, // for 1 MHz clock
+#endif
+                    pf = 1.0009172817958015637819657653483, // (2^(1/12))^(1/63)
                     pf5 = 1.3348398541700343648308318811845, // (2^(1/12))^5
                     pf7 = 1.4983070768766814987992807320298, // (2^(1/12))^7
                     dr = 50.0; // detune ratio coefficient
@@ -517,9 +528,13 @@ class Voice {
       m_ampl = AMPL_MAX;
       m_adsr = 'X';
       m_decay = fxp.timer;
-
-      psg.setEnvelope(fxp.envdecay, 9);
-      psg.setToneAndNoise(m_chan, fxp.tonefreq, fxp.noisefreq, 31);
+#ifdef CLOCK_4MHZ
+      m_fxp.envdecay *= 4;
+      m_fxp.tonefreq *= 4;
+      m_fxp.freqdecay *= 4;
+#endif
+      psg.setEnvelope(m_fxp.envdecay, 9);
+      psg.setToneAndNoise(m_chan, m_fxp.tonefreq, m_fxp.noisefreq, 31);
     }
 
     void stop() {
