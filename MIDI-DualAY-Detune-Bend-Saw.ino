@@ -407,7 +407,11 @@ static const ushort modlen1 = 20, modlen2 = 100, modmax = 10; // modulation rate
 #define ENV_STEP_DIV 26 // divider for switching envelope modes with modulation wheel
 
 ushort getPitch(note_t note, eDetune detune, note_t modstep, ushort modlen) {
-  freq_t freq = freq_table[note - MIDI_MIN], fp = 1.0;
+  int index = note - MIDI_MIN;
+#ifdef CLOCK_4MHZ
+  if (index < 11) index += 12;
+#endif
+  freq_t freq = freq_table[index], fp = 1.0;
   int modval = (modstep > modlen / 2) ? modlen - modstep : modstep,
       pitchBend = 0;
   bool bExact = false;
