@@ -109,7 +109,7 @@ clkOUT = 9;
 #ifdef CLOCK_4MHZ
 static const ushort DIVISOR = 1; // for 4 MHz clock
 #else
-static const ushort DIVISOR = 7; // for 1 MHz clock
+static const ushort DIVISOR = 3; // for 1 MHz clock
 #endif
 
 static void clockSetup() {
@@ -396,7 +396,7 @@ typedef double freq_t;
 #ifdef CLOCK_4MHZ
 static const freq_t ayf = 2500000.00, // for 4 MHz clock
 #else
-static const freq_t ayf = 625000.00, // for 1 MHz clock
+static const freq_t ayf = 1250000.00, // for 1 MHz clock
 #endif
                     pf = 1.0009172817958015637819657653483, // (2^(1/12))^(1/63)
                     pf5 = 1.3348398541700343648308318811845, // (2^(1/12))^5
@@ -536,6 +536,10 @@ class Voice {
       m_fxp.envdecay *= 4;
       m_fxp.tonefreq *= 4;
       m_fxp.freqdecay *= 4;
+#else // for 2 MHz clock
+      m_fxp.envdecay *= 2;
+      m_fxp.tonefreq *= 2;
+      m_fxp.freqdecay *= 2;
 #endif
       psg.setEnvelope(m_fxp.envdecay, 9);
       psg.setToneAndNoise(m_chan, m_fxp.tonefreq, m_fxp.noisefreq, 31);
