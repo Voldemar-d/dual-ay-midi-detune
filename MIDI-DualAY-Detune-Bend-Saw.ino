@@ -1,6 +1,6 @@
 // Arduino Pro Micro project: MIDI synthesizer on two AY-3-8910 chips
 // based on: https://dogemicrosystems.ca/wiki/Dual_AY-3-8910_MIDI_module
-// added support of pitch bend/modulation, detune (several modes) and saw envelope
+// added support of pitch bend/modulation, detune (several modes) and saw envelopes
 
 // pin with potentiometer setting detune ratio
 #define PIN_DETUNE_RATIO A3
@@ -15,9 +15,11 @@ unsigned char g_modDepth = 0;
 // current working mode (no detune by default) switched with button
 unsigned char g_detuneType = 0;
 
+//WARNING: use 4 MHz clock at your own risk - not all AY chips support over 2.5 MHz!
+
 //#define CLOCK_4MHZ
 //#define CLOCK_1MHZ
-// comment both -> 2 MHz clock
+// comment both for 2 MHz clock, uncomment only CLOCK_1MHZ for 1 MHz clock
 
 enum eDetune {
   eNoDetune,
@@ -95,6 +97,8 @@ typedef unsigned char note_t;
 #define NOTE_OFF 0
 
 typedef unsigned char midictrl_t;
+
+static const uint8_t PERC_CHANNEL = 9;
 
 // Pin driver ---------------------------------------------
 
@@ -466,7 +470,7 @@ void Round16(int& idiv) {
 
 static const byte autoEnv[][2] = {{1, 1}, {3, 2}, {2, 3}, {5, 4}};
 
-void setSaw(int modstep, int modlen, note_t note) {
+void setSaw(int modstep, int modlen, note_t note, note_t midiCh) {
   int modval = (modstep > modlen / 2) ? modlen - modstep : modstep,
       inval = analogRead(PIN_DETUNE_RATIO) / SAW_RATIO_DEN, enval;
   if (inval < 1) {
@@ -479,17 +483,18 @@ void setSaw(int modstep, int modlen, note_t note) {
       index--;
     }
     enval /= (oct < 2 ? 16 : 8);
-    enval = enval * autoEnv[index][0] / autoEnv[index][1];
+    if (index > 0)
+      enval = enval * autoEnv[index][0] / autoEnv[index][1];
   }
   else
     enval = inval + int(32.0 * float(g_modDepth) * float(modval) / float(0x7f * modlen) + 0.5);
-  psg.setEnvelope(enval, 8);
+  psg.setEnvelope(enval, midiCh > PERC_CHANNEL ? 10 : 8);
 }
 
 class Voice {
   public:
     ushort m_chan;  // Index to psg channel
-    note_t m_note;
+    note_t m_note, m_midiCh;
     ushort m_pitch, m_modstep, m_modlen;
     eDetune m_detune;
     int m_ampl, m_decay, m_sustain, m_release;
@@ -503,18 +508,19 @@ class Voice {
     }
 
     void start(note_t note, midictrl_t vel, midictrl_t chan, eDetune detune) {
-      const ToneParams *tp = &tones[chan % MAX_TONES];
-      m_note = note;
+      const bool bSaw = (eSaw == detune);
+      const ToneParams *tp = &tones[bSaw ? 0 : chan % MAX_TONES];
+      m_note = note; m_midiCh = chan;
       m_modstep = 0;
-      const bool bSaw = (eSaw == detune && m_detune != detune);
-      m_modlen = bSaw ? modlen2 : modlen1;
-      const int modlen = (bSaw ? m_modlen - int(g_pitchBend) * 3 / 2 : m_modlen);
+      const bool bSawOn = (bSaw && m_detune != detune);
+      m_modlen = bSawOn ? modlen2 : modlen1;
+      const int modlen = (bSawOn ? m_modlen - int(g_pitchBend) * 3 / 2 : m_modlen);
       m_pitch = getPitch(note, detune, m_modstep, modlen);
       m_detune = detune;
-      if (bSaw) { // periodic envelope
+      if (bSawOn) { // periodic envelope
         m_ampl = AMPL_MAX + 1;
         m_adsr = 'S';
-        setSaw(m_modstep, modlen, m_note);
+        setSaw(m_modstep, modlen, m_note, m_midiCh);
       }
       else { // no envelope
         if (vel > 127) {
@@ -625,7 +631,7 @@ class Voice {
         m_pitch = getPitch(m_note, (eDetune)m_detune, m_modstep, modlen);
         psg.setTone(m_chan, m_pitch, m_ampl >> 6);
         if (eSaw == m_detune)
-          setSaw(m_modstep, modlen, m_note);
+          setSaw(m_modstep, modlen, m_note, m_midiCh);
       }
       else {
         psg.setOff(m_chan);
@@ -640,6 +646,7 @@ class Voice {
       psg.setOff(m_chan);
       m_ampl = 0;
       m_detune = eNoDetune;
+      m_midiCh = 0;
     }
 };
 
@@ -651,8 +658,6 @@ static Voice voices[MAX_VOICES];
 // MIDI synthesiser ---------------------------------------
 
 // Deals with assigning note on/note off to voices
-
-static const uint8_t PERC_CHANNEL = 9;
 
 static const note_t
 PERC_MIN = 35,
@@ -959,7 +964,7 @@ void setup() {
 }
 
 void handleMidiMessage(midiEventPacket_t &rx) {
-  if (rx.header == 0xE && rx.byte1 == 0xE0) { // Pitch bend
+  if (rx.header == 0xE && 0xE0 == (rx.byte1 & 0xF0)) { // Pitch bend
     g_pitchBend = rx.byte3 - 0x40;
   }
   else if (rx.header == 0x9) { // Note on
@@ -971,7 +976,7 @@ void handleMidiMessage(midiEventPacket_t &rx) {
   else if (rx.header == 0xB) { // Control Change
     if (rx.byte2 == 0x78 || rx.byte2 == 0x79 || rx.byte2 == 0x7B) // AllSoundOff, ResetAllControllers, or AllNotesOff
       KillVoices();
-    else if (rx.byte1 == 0xB0 && rx.byte2 == 0x01) // Modulation
+    else if (0xB0 == (rx.byte1 & 0xF0) && rx.byte2 == 0x01) // Modulation
       g_modDepth = rx.byte3;
   }
 }
