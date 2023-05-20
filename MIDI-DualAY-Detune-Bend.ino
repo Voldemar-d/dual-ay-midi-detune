@@ -915,7 +915,7 @@ void setup() {
 }
 
 void handleMidiMessage(midiEventPacket_t &rx) {
-  if (rx.header == 0xE && (rx.byte1 & 0xF0) == 0xE0) { // Pitch bend
+  if (rx.header == 0xE && 0xE0 == (rx.byte1 & 0xF0)) { // Pitch bend
     g_pitchBend = rx.byte3 - 0x40;
   }
   else if (rx.header == 0x9) { // Note on
@@ -927,7 +927,7 @@ void handleMidiMessage(midiEventPacket_t &rx) {
   else if (rx.header == 0xB) { // Control Change
     if (rx.byte2 == 0x78 || rx.byte2 == 0x79 || rx.byte2 == 0x7B) // AllSoundOff, ResetAllControllers, or AllNotesOff
       KillVoices();
-    else if ((rx.byte1 & 0xF0) == 0xB0 && rx.byte2 == 0x01) // Modulation
+    else if (0xB0 == (rx.byte1 & 0xF0) && rx.byte2 == 0x01) // Modulation
       g_modDepth = rx.byte3;
   }
 }
