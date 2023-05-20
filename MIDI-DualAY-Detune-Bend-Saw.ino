@@ -16,7 +16,8 @@ unsigned char g_modDepth = 0;
 unsigned char g_detuneType = 0;
 
 //#define CLOCK_4MHZ
-#define CLOCK_1MHZ
+//#define CLOCK_1MHZ
+// comment both -> 2 MHz clock
 
 enum eDetune {
   eNoDetune,
@@ -507,7 +508,7 @@ class Voice {
       m_modstep = 0;
       const bool bSaw = (eSaw == detune && m_detune != detune);
       m_modlen = bSaw ? modlen2 : modlen1;
-      const int modlen = (bSaw ? m_modlen - int(g_pitchBend) : m_modlen);
+      const int modlen = (bSaw ? m_modlen - int(g_pitchBend) * 3 / 2 : m_modlen);
       m_pitch = getPitch(note, detune, m_modstep, modlen);
       m_detune = detune;
       if (bSaw) { // periodic envelope
@@ -618,7 +619,7 @@ class Voice {
       }
 
       if (m_ampl > 0) {
-        const int modlen = (eSaw == m_detune ? m_modlen - int(g_pitchBend) : m_modlen);
+        const int modlen = (eSaw == m_detune ? m_modlen - int(g_pitchBend) * 3 / 2 : m_modlen);
         m_modstep++;
         m_modstep = m_modstep % modlen;
         m_pitch = getPitch(m_note, (eDetune)m_detune, m_modstep, modlen);
