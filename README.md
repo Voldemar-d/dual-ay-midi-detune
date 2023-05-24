@@ -13,5 +13,7 @@ Added functionality:
 
 Fixed circuit part for connecting MIDI input (see MIDI_input_fix.png)
 
+Sketch: MIDI-DualAY-Detune-Bend.ino
+
 Demo video:
 https://youtu.be/jKoCbbaBYAo

@@ -14,6 +14,8 @@ signed char g_pitchBend = 0;
 unsigned char g_modDepth = 0;
 // current working mode (no detune by default) switched with button
 unsigned char g_detuneType = 0;
+// last value from input 'Detune ratio' pin
+unsigned short g_detunePinVal = 0;
 
 //WARNING: use 4 MHz clock at your own risk - not all AY chips support over 2.5 MHz!
 
@@ -431,14 +433,14 @@ ushort getPitch(note_t note, eDetune detune, note_t modstep, ushort modlen) {
   bool bExact = false;
   if (eSaw != detune)
     pitchBend = g_pitchBend + modval * modmax * g_modDepth / 0x7F;
-  else if (eSaw == detune && (analogRead(PIN_DETUNE_RATIO) / SAW_RATIO_DEN) < 1) {
-    pitchBend = g_pitchBend;
+  else if (eSaw == detune && (g_detunePinVal / SAW_RATIO_DEN) < 1) {
+    //pitchBend = g_pitchBend; // uncomment to enable Pitch Bend wheel in 'exact envelope' mode (almost has no sense)
     bExact = (0 == pitchBend && (g_modDepth / ENV_STEP_DIV) > 0);
   }
   if (pitchBend != 0)
     fp = pow(pf, freq_t(pitchBend));
   if (detune >= eDetuneOn) {
-    fp *= pow(pf, freq_t(analogRead(PIN_DETUNE_RATIO)) / dr);
+    fp *= pow(pf, freq_t(g_detunePinVal) / dr);
     switch (detune) {
       case eDetuneOctUp:
         fp *= 2.0;
@@ -472,7 +474,7 @@ static const byte autoEnv[][2] = {{1, 1}, {3, 2}, {2, 3}, {5, 4}};
 
 void setSaw(int modstep, int modlen, note_t note, note_t midiCh) {
   int modval = (modstep > modlen / 2) ? modlen - modstep : modstep,
-      inval = analogRead(PIN_DETUNE_RATIO) / SAW_RATIO_DEN, enval;
+      inval = g_detunePinVal / SAW_RATIO_DEN, enval;
   if (inval < 1) {
     int index = note - MIDI_MIN, oct = index % 12;
     freq_t freq = freq_table[index];
@@ -899,6 +901,9 @@ static void noteOn(midictrl_t chan, note_t note, midictrl_t vel) {
 }
 
 static void update100Hz() {
+  // read value from 'Detune ratio' input pin
+  g_detunePinVal = analogRead(PIN_DETUNE_RATIO);
+  // update all voices
   for (ushort i = 0; i < MAX_VOICES; i++) {
     voices[i].update100Hz();
     if (m_playing[i] == PERC_NOTE && ! (voices[i].isPlaying())) {
