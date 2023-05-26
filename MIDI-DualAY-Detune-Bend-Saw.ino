@@ -17,6 +17,9 @@ unsigned char g_detuneType = 0;
 // last value from input 'Detune ratio' pin
 unsigned short g_detunePinVal = 0;
 
+#define SYNC_ENV
+// if defined, synchronization between envelope and tone is performed in 'Exact envelope' mode
+
 //WARNING: use 4 MHz clock at your own risk - not all AY chips support over 2.5 MHz!
 
 //#define CLOCK_4MHZ
@@ -404,6 +407,66 @@ static const ToneParams tones[MAX_TONES] = {
   { 10, 31, 30 }
 };
 
+#define MIN_MOD_LEN 5
+
+class Mod {
+    ushort m_modlen, m_modstep;
+    bool m_bCont, m_bAtt, m_bAlt, m_bHold, m_bUp, m_bEnd;
+  public:
+    Mod() {}
+    void start(ushort modlen, unsigned char type)
+    {
+      m_modlen = max(modlen, MIN_MOD_LEN);
+      m_bCont = (0 != (type & 0x08));
+      m_bAtt = (0 != (type & 0x04));
+      if (!m_bCont && !m_bAtt) {
+        m_bAlt = false; m_bHold = true;
+      }
+      else if (!m_bCont && m_bAtt) {
+        m_bAlt = m_bHold = true;
+      }
+      else {
+        m_bAlt = (0 != (type & 0x02));
+        m_bHold = (0 != (type & 0x01));
+      }
+      m_modstep = 0;
+      m_bUp = m_bAtt;
+      m_bEnd = false;
+    }
+    int getVal(int maxVal) const {
+      if (m_bUp)
+        return int(m_modstep) * maxVal / (int(m_modlen) - 1);
+      return (int(m_modlen) - int(m_modstep) - 1) * maxVal / (int(m_modlen) - 1);
+    }
+    int nextVal(ushort modlen, int maxVal) {
+      if (modlen < MIN_MOD_LEN)
+        modlen = MIN_MOD_LEN;
+      if (modlen == m_modlen) {
+        if (!m_bEnd)
+          m_modstep++;
+      }
+      else {
+        int dl = int(modlen) - int(m_modlen);
+        m_modlen = modlen;
+        if (m_bEnd)
+          m_modstep = m_modlen - 1;
+        else if (dl > 0)
+          m_modstep += dl / 2;
+      }
+      if (m_modstep >= m_modlen) {
+        if (m_bHold) {
+          m_bEnd = true;
+          m_modstep = m_modlen - 1;
+        }
+        else if (!m_bEnd)
+          m_modstep = 0;
+        if (m_bAlt)
+          m_bUp = !m_bUp;
+      }
+      return getVal(maxVal);
+    }
+};
+
 typedef double freq_t;
 #ifdef CLOCK_4MHZ
 static const freq_t ayf = 2500000.00, // for 4 MHz clock
@@ -418,21 +481,20 @@ static const freq_t ayf = 1250000.00, // for 2 MHz clock
                     pf5 = 1.3348398541700343648308318811845, // (2^(1/12))^5
                     pf7 = 1.4983070768766814987992807320298, // (2^(1/12))^7
                     dr = 50.0; // detune ratio coefficient
-static const ushort modlen1 = 20, modlen2 = 100, modmax = 10; // modulation rate and max depth
+static const ushort modlen1 = 10, modlen2 = 50, modmax1 = 10, modmax2 = 10; // modulation rate and max depth
 #define SAW_RATIO_DEN 16 // coefficient for getting saw depth
 #define ENV_STEP_DIV 26 // divider for switching envelope modes with modulation wheel
 
-ushort getPitch(note_t note, eDetune detune, note_t modstep, ushort modlen) {
+ushort getPitch(note_t note, eDetune detune, int modval) {
   int index = note - MIDI_MIN;
 #ifdef CLOCK_4MHZ
   if (index < 11) index += 12;
 #endif
   freq_t freq = freq_table[index], fp = 1.0;
-  int modval = (modstep > modlen / 2) ? modlen - modstep : modstep,
-      pitchBend = 0;
+  int pitchBend = 0;
   bool bExact = false;
   if (eSaw != detune)
-    pitchBend = g_pitchBend + modval * modmax * g_modDepth / 0x7F;
+    pitchBend = g_pitchBend + modval * modmax1 * g_modDepth / 0x7F;
   else if (eSaw == detune && (g_detunePinVal / SAW_RATIO_DEN) < 1) {
     //pitchBend = g_pitchBend; // uncomment to enable Pitch Bend wheel in 'exact envelope' mode (almost has no sense)
     bExact = (0 == pitchBend && (g_modDepth / ENV_STEP_DIV) > 0);
@@ -472,15 +534,16 @@ void Round16(int& idiv) {
 
 static const byte autoEnv[][2] = {{1, 1}, {3, 2}, {2, 3}, {5, 4}};
 
-void setSaw(int modstep, int modlen, note_t note, note_t midiCh) {
-  int modval = (modstep > modlen / 2) ? modlen - modstep : modstep,
-      inval = g_detunePinVal / SAW_RATIO_DEN, enval;
+bool setSaw(int modval, note_t note, note_t midiCh) {
+  bool bExact = false;
+  int inval = g_detunePinVal / SAW_RATIO_DEN, enval;
   if (inval < 1) {
     int index = note - MIDI_MIN, oct = index % 12;
     freq_t freq = freq_table[index];
     enval = int(ayf / freq);
     index = g_modDepth / ENV_STEP_DIV;
     if (index > 0) {
+      bExact = true;
       Round16(enval);
       index--;
     }
@@ -489,16 +552,40 @@ void setSaw(int modstep, int modlen, note_t note, note_t midiCh) {
       enval = enval * autoEnv[index][0] / autoEnv[index][1];
   }
   else
-    enval = inval + int(32.0 * float(g_modDepth) * float(modval) / float(0x7f * modlen) + 0.5);
+    enval = inval + int(32.0 * float(g_modDepth) * float(modval) / float(0x7f * modmax2) + 0.5);
   psg.setEnvelope(enval, midiCh > PERC_CHANNEL ? 10 : 8);
+#ifdef SYNC_ENV
+  if (bExact)
+    psg.update(); // Force flush
+#endif
+  return bExact;
 }
+
+static const unsigned char modType[16] = {14, 12, 13, 15, 10, 8, 9, 11, 14, 14, 14, 12, 13, 15, 10, 8};
+//modtype[0] = 14;  // ch1 default modulation type: /\/\/\/\/\/
+//modtype[1] = 12;  // ch2 type: \-----
+//modtype[2] = 13;  // ch3 type: /-----
+//modtype[3] = 15;  // ch4 type: /_____
+//modtype[4] = 10;  // ch5 type: \/\/\/\/\/
+//modtype[5] = 8;   // ch6 type: \-----
+//modtype[6] = 9;   // ch7 type: \_____
+//modtype[7] = 11;  // ch8 type: \-----
+//modtype[8] = 14;  // ch9 default
+//modtype[9] = 14;  // ch10 drums
+//modtype[10] = 14; // ch11 default
+//modtype[11] = 12; // ch12 same as ch2
+//modtype[12] = 13; // ch13 same as ch3
+//modtype[13] = 15; // ch14 same as ch4
+//modtype[14] = 10; // ch15 same as ch5
+//modtype[15] = 8;  // ch16 same as ch8
 
 class Voice {
   public:
     ushort m_chan;  // Index to psg channel
     note_t m_note, m_midiCh;
-    ushort m_pitch, m_modstep, m_modlen;
+    ushort m_pitch;
     eDetune m_detune;
+    Mod m_modPitch, m_modEnv;
     int m_ampl, m_decay, m_sustain, m_release;
     static const int AMPL_MAX = 1023;
     ushort m_adsr;
@@ -513,16 +600,16 @@ class Voice {
       const bool bSaw = (eSaw == detune);
       const ToneParams *tp = &tones[bSaw ? 0 : chan % MAX_TONES];
       m_note = note; m_midiCh = chan;
-      m_modstep = 0;
+      m_modPitch.start(modlen1, 14); // pitch modulation type: /\/\/\/\/\/
+      m_modEnv.start(modlen2 - int(g_pitchBend) * 3 / 4, modType[chan]); // get modulation type by MIDI channel
       const bool bSawOn = (bSaw && m_detune != detune);
-      m_modlen = bSawOn ? modlen2 : modlen1;
-      const int modlen = (bSawOn ? m_modlen - int(g_pitchBend) * 3 / 2 : m_modlen);
-      m_pitch = getPitch(note, detune, m_modstep, modlen);
+      m_pitch = getPitch(note, detune, m_modPitch.getVal(modmax1));
       m_detune = detune;
+      bool bExact = false;
       if (bSawOn) { // periodic envelope
         m_ampl = AMPL_MAX + 1;
         m_adsr = 'S';
-        setSaw(m_modstep, modlen, m_note, m_midiCh);
+        bExact = setSaw(m_modEnv.getVal(modmax2), m_note, m_midiCh);
       }
       else { // no envelope
         if (vel > 127) {
@@ -536,7 +623,17 @@ class Voice {
         m_release = tp->release;
         m_adsr = 'D';
       }
+#ifdef SYNC_ENV
+      if (bExact) { // synchronize tone with envelope
+        psg.setTone(m_chan, 0, m_ampl >> 6);
+        psg.update(); // Force flush
+      }
+#endif
       psg.setTone(m_chan, m_pitch, m_ampl >> 6);
+#ifdef SYNC_ENV
+      if (bExact)
+        psg.update(); // Force flush
+#endif
     }
 
     struct FXParams m_fxp;
@@ -627,13 +724,10 @@ class Voice {
       }
 
       if (m_ampl > 0) {
-        const int modlen = (eSaw == m_detune ? m_modlen - int(g_pitchBend) * 3 / 2 : m_modlen);
-        m_modstep++;
-        m_modstep = m_modstep % modlen;
-        m_pitch = getPitch(m_note, (eDetune)m_detune, m_modstep, modlen);
+        m_pitch = getPitch(m_note, (eDetune)m_detune, m_modPitch.nextVal(modlen1, modmax1));
         psg.setTone(m_chan, m_pitch, m_ampl >> 6);
         if (eSaw == m_detune)
-          setSaw(m_modstep, modlen, m_note, m_midiCh);
+          setSaw(m_modEnv.nextVal(modlen2 - int(g_pitchBend) * 3 / 4, modmax2), m_note, m_midiCh);
       }
       else {
         psg.setOff(m_chan);
