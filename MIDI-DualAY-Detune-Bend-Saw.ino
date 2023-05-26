@@ -1046,12 +1046,14 @@ void loop() {
   }
 #endif
 
+  bool bPressed = false;
   unsigned long now = millis();
   if ((now - lastUpdate) > 10) {
     update100Hz();
     lastUpdate += 10;
+    bPressed = btnDetune.Pressed();
   }
-  if (btnDetune.Pressed()) {
+  if (bPressed) {
     KillVoices();
     g_detuneType++;
     if (g_detuneType >= eDetuneTotal)
