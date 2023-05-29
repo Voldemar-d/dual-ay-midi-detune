@@ -11,11 +11,11 @@
 // from MIDI message 0xE: pitch bend (0x00 - lowest, 0x40 - none, 0x7F - highest)
 signed char g_pitchBend = 0;
 // from MIDI message 0xB: modulation depth (0x00 - none, 0x7F - max)
-unsigned char g_modDepth = 0;
+uint8_t g_modDepth = 0;
 // current working mode (no detune by default) switched with button
-unsigned char g_detuneType = 0;
+uint8_t g_detuneType = 0;
 // last value from input 'Detune ratio' pin
-unsigned short g_detunePinVal = 0;
+uint16_t g_detunePinVal = 0;
 
 #define SYNC_ENV
 // if defined, synchronization between envelope and tone is performed in 'Exact envelope' mode
@@ -145,7 +145,7 @@ static void clockSetup() {
 
 static void setData(unsigned char db) {
   unsigned char bit = 1;
-  for (ushort i = 0; i < 8; i++) {
+  for (uint8_t i = 0; i < 8; i++) {
     digitalWrite(dbus[i], (db & bit) ? HIGH : LOW);
     bit <<= 1;
   }
@@ -212,7 +212,7 @@ class PSGRegs {
     unsigned char lastregs_B[16];
 
     void init() {
-      for (int i = 0; i < 16; i++) {
+      for (uint8_t i = 0; i < 16; i++) {
         regs_A[i] = lastregs_A[i] = 0xFF;
         writeReg_AY(0, i, regs_A[i]);
 
@@ -222,7 +222,7 @@ class PSGRegs {
     }
 
     void update() {
-      for (int i = 0; i < 16; i++) {
+      for (uint8_t i = 0; i < 16; i++) {
         if (regs_A[i] != lastregs_A[i]) {
           writeReg_AY(0, i, regs_A[i]);
           lastregs_A[i] = regs_A[i];
@@ -235,7 +235,7 @@ class PSGRegs {
       }
     }
 
-    void setTone(ushort ch, ushort divisor, ushort ampl) {
+    void setTone(ushort ch, ushort divisor, uint8_t ampl) {
       unsigned char* regs_AY = regs_A;
       if (ch > 2) {
         //reduce channel to usable range
@@ -252,7 +252,7 @@ class PSGRegs {
       regs_AY[MIXER] = (regs_AY[MIXER] | mask) ^ (1 << ch);
     }
 
-    void setToneAndNoise(ushort ch, ushort divisor, ushort noisefreq, ushort ampl) {
+    void setToneAndNoise(ushort ch, ushort divisor, uint8_t noisefreq, uint8_t ampl) {
       unsigned char* regs_AY = regs_A;
       if (ch > 2) {
         //reduce channel to usable range
@@ -271,7 +271,7 @@ class PSGRegs {
       regs_AY[MIXER] = (regs_AY[MIXER] | mask) ^ (bits << ch);
     }
 
-    void setEnvelope(ushort divisor, ushort shape) {
+    void setEnvelope(ushort divisor, uint8_t shape) {
       regs_A[ENVLOW]  = (divisor & 0xFF);
       regs_A[ENVHIGH] = (divisor >> 8);
       regs_A[ENVSHAPE] = shape;
@@ -281,7 +281,7 @@ class PSGRegs {
       regs_B[ENVSHAPE] = shape;
     }
 
-    void setOff(ushort ch) {
+    void setOff(uint8_t ch) {
       unsigned char* regs_AY = regs_A;
       if (ch > 2) {
         //reduce channel to usable range
@@ -304,7 +304,7 @@ static PSGRegs psg;
 
 // Voice generation ---------------------------------------
 
-static const ushort
+static const uint8_t
 MIDI_MIN = 24,
 MIDI_MAX = 96,
 N_NOTES = (MIDI_MAX + 1 - MIDI_MIN);
@@ -386,17 +386,17 @@ static const ushort freq_table[N_NOTES] = {
 };
 
 struct FXParams {
-  ushort noisefreq;
+  uint8_t noisefreq;
   ushort tonefreq;
   ushort envdecay;
   ushort freqdecay;
-  ushort timer;
+  uint8_t timer;
 };
 
 struct ToneParams {
-  ushort decay;
-  ushort sustain; // Values 0..32
-  ushort release;
+  uint8_t decay;
+  uint8_t sustain; // Values 0..32
+  uint8_t release;
 };
 
 static const ushort MAX_TONES = 4;
@@ -486,7 +486,7 @@ static const ushort modlen1 = 10, modlen2 = 50, modmax1 = 10, modmax2 = 10; // m
 #define ENV_STEP_DIV 26 // divider for switching envelope modes with modulation wheel
 
 ushort getPitch(note_t note, eDetune detune, int modval) {
-  int index = note - MIDI_MIN;
+  uint8_t index = note - MIDI_MIN;
 #ifdef CLOCK_4MHZ
   if (index < 11) index += 12;
 #endif
@@ -519,13 +519,13 @@ ushort getPitch(note_t note, eDetune detune, int modval) {
     }
   }
   freq *= fp;
-  int idiv = int(float(ayf / freq));
+  uint16_t idiv = uint16_t(float(ayf / freq));
   if (bExact)
     Round16(idiv);
   return idiv;
 }
 
-void Round16(int& idiv) {
+void Round16(uint16_t& idiv) {
   if (idiv % 16 > 7)
     idiv += 16 - idiv % 16;
   else
@@ -536,9 +536,9 @@ static const byte autoEnv[][2] = {{1, 1}, {3, 2}, {2, 3}, {5, 4}};
 
 bool setSaw(int modval, note_t note, note_t midiCh) {
   bool bExact = false;
-  int inval = g_detunePinVal / SAW_RATIO_DEN, enval;
+  uint16_t inval = g_detunePinVal / SAW_RATIO_DEN, enval;
   if (inval < 1) {
-    int index = note - MIDI_MIN, oct = index % 12;
+    uint8_t index = note - MIDI_MIN, oct = index % 12;
     freq_t freq = freq_table[index];
     enval = int(ayf / freq);
     index = g_modDepth / ENV_STEP_DIV;
@@ -561,7 +561,7 @@ bool setSaw(int modval, note_t note, note_t midiCh) {
   return bExact;
 }
 
-static const unsigned char modType[16] = {14, 12, 13, 15, 10, 8, 9, 11, 14, 14, 14, 12, 13, 15, 10, 8};
+static const uint8_t modType[16] = {14, 12, 13, 15, 10, 8, 9, 11, 14, 14, 14, 12, 13, 15, 10, 8};
 //modtype[0] = 14;  // ch1 default modulation type: /\/\/\/\/\/
 //modtype[1] = 12;  // ch2 type: \-----
 //modtype[2] = 13;  // ch3 type: /-----
@@ -579,16 +579,17 @@ static const unsigned char modType[16] = {14, 12, 13, 15, 10, 8, 9, 11, 14, 14, 
 //modtype[14] = 10; // ch15 same as ch5
 //modtype[15] = 8;  // ch16 same as ch8
 
+static const ushort AMPL_MAX = 1023;
+
 class Voice {
   public:
-    ushort m_chan;  // Index to psg channel
+    midictrl_t m_chan;  // Index to psg channel
     note_t m_note, m_midiCh;
     ushort m_pitch;
     eDetune m_detune;
     Mod m_modPitch, m_modEnv;
-    int m_ampl, m_decay, m_sustain, m_release;
-    static const int AMPL_MAX = 1023;
-    ushort m_adsr;
+    uint16_t m_ampl, m_sustain;
+    uint8_t m_adsr, m_decay, m_release;
 
     void init(ushort chan) {
       m_chan = chan;
@@ -747,7 +748,7 @@ class Voice {
 };
 
 
-static const ushort MAX_VOICES = 6;
+static const uint8_t MAX_VOICES = 6;
 
 static Voice voices[MAX_VOICES];
 
@@ -786,7 +787,7 @@ static const struct FXParams perc_params[PERC_MAX - PERC_MIN + 1] = {
 };
 
 
-static const int REQ_MAP_SIZE = (N_NOTES + 7) / 8;
+static const uint8_t REQ_MAP_SIZE = (N_NOTES + 7) / 8;
 static uint8_t m_requestMap[REQ_MAP_SIZE];
 // Bit is set for each note being requested
 static  midictrl_t m_velocity[N_NOTES];
@@ -806,10 +807,10 @@ static uint8_t m_voiceNo[N_NOTES];
 // Which voice is playing each note
 
 
-static bool startNote(ushort idx) {
+static bool startNote(uint8_t idx) {
   const bool bDetuneOn = (g_detuneType >= eDetuneOn);
-  const ushort nv = bDetuneOn ? 3 : MAX_VOICES;
-  for (ushort i = 0; i < nv; i++) {
+  const uint8_t nv = bDetuneOn ? 3 : MAX_VOICES;
+  for (uint8_t i = 0; i < nv; i++) {
     if (m_playing[i] == NO_NOTE) {
       voices[i].start(MIDI_MIN + idx, m_velocity[idx], m_chan[idx], bDetuneOn ? eNoDetune : (eDetune)g_detuneType);
       m_playing[i] = idx;
@@ -826,8 +827,8 @@ static bool startNote(ushort idx) {
 }
 
 static bool startPercussion(note_t note) {
-  const ushort nv = (g_detuneType >= eDetuneOn) ? 3 : MAX_VOICES;
-  for (ushort i = 0; i < nv; i++) {
+  const uint8_t nv = (g_detuneType >= eDetuneOn) ? 3 : MAX_VOICES;
+  for (uint8_t i = 0; i < nv; i++) {
     if (m_playing[i] == NO_NOTE || m_playing[i] == PERC_NOTE) {
       if (note >= PERC_MIN && note <= PERC_MAX) {
         voices[i].startFX(perc_params[note - PERC_MIN]);
@@ -887,7 +888,7 @@ static void stopOneNote() {
 
 static void updateRequestedNotes() {
   m_highest = m_lowest = NO_NOTE;
-  ushort i, j;
+  uint8_t i, j;
 
   // Check highest requested note is playing
   // Return true if note was restarted; false if already playing
@@ -923,7 +924,7 @@ static bool restartANote() {
 }
 
 static void synth_init() {
-  ushort i;
+  uint8_t i;
 
   for (i = 0; i < REQ_MAP_SIZE; i++) {
     m_requestMap[i] = 0;
@@ -977,7 +978,7 @@ static void noteOn(midictrl_t chan, note_t note, midictrl_t vel) {
     return; // Just ignore it
   }
 
-  ushort idx = note - MIDI_MIN;
+  uint8_t idx = note - MIDI_MIN;
 
   if (m_voiceNo[idx] != NO_VOICE) {
     return; // Already playing. Ignore this request.
@@ -998,7 +999,7 @@ static void update100Hz() {
   // read value from 'Detune ratio' input pin
   g_detunePinVal = analogRead(PIN_DETUNE_RATIO);
   // update all voices
-  for (ushort i = 0; i < MAX_VOICES; i++) {
+  for (uint8_t i = 0; i < MAX_VOICES; i++) {
     voices[i].update100Hz();
     if (m_playing[i] == PERC_NOTE && ! (voices[i].isPlaying())) {
       m_playing[i] = NO_NOTE;
@@ -1035,7 +1036,7 @@ void setup() {
   pinMode(BDIR_B, OUTPUT);
   digitalWrite(BDIR_B, LOW); // BDIR low
 
-  for (ushort i = 0; i < 8; i++) {
+  for (uint8_t i = 0; i < 8; i++) {
     pinMode(dbus[i], OUTPUT);
     digitalWrite(dbus[i], LOW); // Set bus low
   }
@@ -1047,7 +1048,7 @@ void setup() {
   lastUpdate = millis();
 
   psg.init();
-  for (ushort i = 0; i < MAX_VOICES; i++) {
+  for (uint8_t i = 0; i < MAX_VOICES; i++) {
     voices[i].init(i);
   }
   synth_init();
@@ -1081,7 +1082,7 @@ void handleMidiMessage(midiEventPacket_t &rx) {
 }
 
 void KillVoices() {
-  for (ushort i = 0; i < MAX_VOICES; i++)
+  for (uint8_t i = 0; i < MAX_VOICES; i++)
     voices[i].kill();
   synth_init();
 }
