@@ -28,3 +28,6 @@ Update:
 - support of 1/2/4 MHz AY clock frequencies
 
 Sketch: MIDI-DualAY-Detune-Bend-Saw.ino
+
+Demo video:
+https://youtu.be/iabg9OR1BEo
