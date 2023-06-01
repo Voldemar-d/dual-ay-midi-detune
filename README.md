@@ -1,5 +1,5 @@
 # Arduino dual AY MIDI detune/envelope
-Project for Arduino Pro Micro: MIDI synthesizer on two AY-3-8910 chips with detune functionality.
+Project for Arduino Pro Micro: MIDI synthesizer on two AY-3-8910 chips with detune functionality and usage of envelope generator.
 
 Based on (and great thanks to the author):
 https://dogemicrosystems.ca/wiki/Dual_AY-3-8910_MIDI_module
