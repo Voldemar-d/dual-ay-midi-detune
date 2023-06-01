@@ -17,3 +17,14 @@ Sketch: MIDI-DualAY-Detune-Bend.ino
 
 Demo video:
 https://youtu.be/jKoCbbaBYAo
+
+Update:
+- added mode with envelope generator
+- potentiometer changes envelope divider
+- pitch bend and modulation wheels set speed and depth of envelope divider modulation
+- different envelope divider modulation types in different MIDI channels
+- modes with automatical envelope divider calculation
+- tried to sync between tone and envelope generators
+- support of 1/2/4 MHz AY clock frequencies
+
+Sketch: MIDI-DualAY-Detune-Bend-Saw.ino
