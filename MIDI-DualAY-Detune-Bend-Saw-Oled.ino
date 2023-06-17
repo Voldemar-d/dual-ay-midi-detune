@@ -115,8 +115,7 @@ typedef unsigned char midictrl_t;
 
 static const uint8_t PERC_CHANNEL = 9;
 
-static const byte
-clkOUT = 9;
+static const byte clkOUT = 9;
 
 #ifdef CLOCK_4MHZ
 static const ushort DIVISOR = 1; // for 4 MHz clock
@@ -442,8 +441,8 @@ static const freq_t ayf = 1250000.00, // for 2 MHz clock
 #endif
                     pf = 1.0009172817958015637819657653483, // (2^(1/12))^(1/63)
                     pf5 = 1.3348398541700343648308318811845, // (2^(1/12))^5
-                    pf7 = 1.4983070768766814987992807320298, // (2^(1/12))^7
-                    dr = 50.0; // detune ratio coefficient
+                    pf7 = 1.4983070768766814987992807320298; // (2^(1/12))^7
+#define DETUNE_RATIO_DEN 50 // detune ratio coefficient
 static const ushort modlen1 = 10, modlen2 = 50, modmax1 = 10, modmax2 = 10; // modulation rate and max depth
 #define SAW_RATIO_DEN 16 // coefficient for getting saw depth
 #define ENV_STEP_DIV 26 // divider for switching envelope modes with modulation wheel
@@ -465,7 +464,7 @@ ushort getPitch(note_t note, eDetune detune, int modval) {
   if (pitchBend != 0)
     fp = pow(pf, freq_t(pitchBend));
   if (detune >= eDetuneOn) {
-    fp *= pow(pf, freq_t(g_detunePinVal) / dr);
+    fp *= pow(pf, freq_t(g_detunePinVal) / freq_t(DETUNE_RATIO_DEN));
     switch (detune) {
       case eDetuneOctUp:
         fp *= 2.0;
@@ -515,7 +514,7 @@ bool setSaw(int modval, note_t note, note_t midiCh) {
       enval = enval * autoEnv[index][0] / autoEnv[index][1];
   }
   else
-    enval = inval + int(32.0 * float(g_modDepth) * float(modval) / float(0x7f * modmax2) + 0.5);
+    enval = inval + uint16_t(32.0 * float(g_modDepth) * float(modval) / float(0x7f * modmax2) + 0.5);
   psg.setEnvelope(enval, midiCh > PERC_CHANNEL ? 10 : 8);
 #ifdef SYNC_ENV
   if (bExact)
@@ -1131,24 +1130,38 @@ void showMode() {
   }
   oled.println("");
   oled.println("");
-  oled.println("Val       Volume");
+  oled.println("Param    Volume ABC");
   oled.println("");
 }
 
-char stext[10];
+char stext[6];
 
 void displayOLED() {
   oled.setCursor(0, 24);
   oled.print("                      ");
-  const byte vA = max(volumeA[0], volumeA[1]),
-             vB = max(volumeB[0], volumeB[1]),
-             vC = max(volumeC[0], volumeC[1]);
   oled.setCursor(0, 24);
-  sprintf(stext, "%d", g_detunePinVal);
+  if (eSaw == g_detuneType) {
+    uint8_t inval = uint8_t(g_detunePinVal / SAW_RATIO_DEN);
+    bool bExact = false; byte index = 0;
+    if (inval < 1) {
+      index = g_modDepth / ENV_STEP_DIV;
+      if (index > 0) {
+        bExact = true;
+        index--;
+      }
+    }
+    if (bExact)
+      sprintf(stext, "D=%d:%d", autoEnv[index][0], autoEnv[index][1]);
+    else
+      sprintf(stext, "D=%d", inval);
+  }
+  else
+    sprintf(stext, "%d", (g_detuneType >= eDetuneOn) ? int(float(g_detunePinVal) / float(DETUNE_RATIO_DEN)) : g_detunePinVal);
   oled.print(stext);
-  oled.setCursor(32 + vA / 1.5, 24);
+  const byte vB = max(volumeB[0], volumeB[1]);
+  oled.setCursor(32 + max(volumeA[0], volumeA[1]) / 1.5, 24);
   oled.print(">");
-  oled.setCursor((122 - vC / 1.5), 24);
+  oled.setCursor((122 - max(volumeC[0], volumeC[1]) / 1.5), 24);
   oled.print("<");
   oled.setCursor((80 + vB / 1.5), 24);
   oled.print("]");
