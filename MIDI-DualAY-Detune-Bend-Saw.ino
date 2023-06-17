@@ -497,7 +497,7 @@ ushort getPitch(note_t note, eDetune detune, int modval) {
     pitchBend = g_pitchBend + modval * modmax1 * g_modDepth / 0x7F;
   else if (eSaw == detune && (g_detunePinVal / SAW_RATIO_DEN) < 1) {
     //pitchBend = g_pitchBend; // uncomment to enable Pitch Bend wheel in 'exact envelope' mode (almost has no sense)
-    bExact = (0 == g_pitchBend && (g_modDepth / ENV_STEP_DIV) > 0);
+    bExact = (0 == pitchBend && (g_modDepth / ENV_STEP_DIV) > 0);
   }
   if (pitchBend != 0)
     fp = pow(pf, freq_t(pitchBend));
