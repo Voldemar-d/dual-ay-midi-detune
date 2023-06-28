@@ -271,7 +271,7 @@ MIDI_MIN = 24,
 MIDI_MAX = 96,
 N_NOTES = (MIDI_MAX + 1 - MIDI_MIN);
 
-static const ushort freq_table[N_NOTES] = {
+static const ushort freq_table[N_NOTES] PROGMEM = {
   327, // MIDI 24, 32.70 Hz
   346, // MIDI 25, 34.65 Hz
   367, // MIDI 26, 36.71 Hz
@@ -452,7 +452,7 @@ ushort getPitch(note_t note, eDetune detune, int modval) {
 #ifdef CLOCK_4MHZ
   if (index < 11) index += 12;
 #endif
-  freq_t freq = freq_table[index], fp = 1.0;
+  freq_t freq = pgm_read_word(&freq_table[index]), fp = 1.0;
   int pitchBend = 0;
   bool bExact = false;
   if (eSaw != detune)
@@ -501,7 +501,7 @@ bool setSaw(int modval, note_t note, note_t midiCh) {
   uint16_t inval = g_detunePinVal / SAW_RATIO_DEN, enval;
   if (inval < 1) {
     uint8_t index = note - MIDI_MIN, oct = index % 12;
-    freq_t freq = freq_table[index];
+    freq_t freq = pgm_read_word(&freq_table[index]);
     enval = int(ayf / freq);
     index = g_modDepth / ENV_STEP_DIV;
     if (index > 0) {
@@ -1101,36 +1101,49 @@ void setupDisplay() {
   oled.clear();
 }
 
+static const char sMidiSynth[] PROGMEM = "MIDI Synthesizer";
+static const char sMode[] PROGMEM = "Mode: ";
+static const char sMode0[] PROGMEM = "Detune/Env Off";
+static const char sMode1[] PROGMEM = "Saw Envelope";
+static const char sMode2[] PROGMEM = "Detune On";
+static const char sMode3[] PROGMEM = "Detune + Oct.Up";
+static const char sMode4[] PROGMEM = "Detune + Oct.Dn";
+static const char sMode5[] PROGMEM = "Detune + 5th";
+static const char sMode6[] PROGMEM = "Detune + 7th";
+static const char sParamVol[] PROGMEM = "Param    Volume ABC";
+
+#define FPSTR(pstr) (const __FlashStringHelper*)(pstr)
+
 void showMode() {
   oled.clear();
-  oled.println("MIDI Synthesizer ");
-  oled.print("Mode: ");
+  oled.println(FPSTR(sMidiSynth));
+  oled.print(FPSTR(sMode));
   switch (g_detuneType) {
     case eSaw:
-      oled.print("Saw Envelope");
+      oled.print(FPSTR(sMode1));
       break;
     case eDetuneOn:
-      oled.print("Detune On");
+      oled.print(FPSTR(sMode2));
       break;
     case eDetuneOctUp:
-      oled.print("Detune + Oct.Up");
+      oled.print(FPSTR(sMode3));
       break;
     case eDetuneOctDn:
-      oled.print("Detune + Oct.Dn");
+      oled.print(FPSTR(sMode4));
       break;
     case eDetune5:
-      oled.print("Detune + 5th");
+      oled.print(FPSTR(sMode5));
       break;
     case eDetune7:
-      oled.print("Detune + 7th");
+      oled.print(FPSTR(sMode6));
       break;
     default:
-      oled.print("Detune/Env Off");
+      oled.print(FPSTR(sMode0));
       break;
   }
   oled.println("");
   oled.println("");
-  oled.println("Param    Volume ABC");
+  oled.println(FPSTR(sParamVol));
   oled.println("");
 }
 
@@ -1138,7 +1151,8 @@ char stext[6];
 
 void displayOLED() {
   oled.setCursor(0, 24);
-  oled.print("                      ");
+  for (byte i = 0; i < 22; i++)
+    oled.print(' ');
   oled.setCursor(0, 24);
   if (eSaw == g_detuneType) {
     uint8_t inval = uint8_t(g_detunePinVal / SAW_RATIO_DEN);
